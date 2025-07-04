@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Floc Analysis Dashboard</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { background-color: #f8f9fa; }
+        .chart-container {
+            background-color: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.05);
+        }
+        .image-gallery {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 15px;
+        }
+        .image-gallery img {
+            width: 100%;
+            height: auto;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        .image-gallery img:hover {
+            transform: scale(1.05);
+        }
+        .modal-img {
+            max-width: 100%;
+            height: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container my-5">
+        <h1 class="text-center mb-4">Floc 침전 분석 대시보드</h1>
+        
+        <!-- 에러 메시지 표시 영역 -->
+        <div id="error-alert" class="alert alert-danger d-none" role="alert"></div>
+
+        <!-- 차트 섹션 -->
+        <div class="row mb-4">
+            <div class="col-lg-12">
+                <div class="chart-container">
+                    <h4 class="mb-3">시간에 따른 침전 높이 및 Floc 개수</h4>
+                    <canvas id="heightFlocChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <div class="chart-container">
+                    <h4 class="mb-3">Floc 크기 분포</h4>
+                    <canvas id="flocSizeChart"></canvas>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="chart-container">
+                    <h4 class="mb-3">시간에 따른 탁도 변화</h4>
+                    <canvas id="turbidityChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- 이미지 갤러리 섹션 -->
+        <h2 class="text-center my-4">분석 이미지 갤러리</h2>
+        <div id="image-gallery" class="image-gallery"></div>
+    </div>
+
+    <!-- 이미지 클릭 시 크게 보여줄 Modal -->
+    <div class="modal fade" id="imageModal" tabindex="-1" aria-labelledby="imageModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="imageModalLabel">Image</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body text-center">
+                    <img src="" id="modal-img-element" class="modal-img">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script>
+        // 에러 메시지를 표시하는 함수
+        function showError(message) {
+            const errorAlert = document.getElementById('error-alert');
+            errorAlert.textContent = message;
+            errorAlert.classList.remove('d-none');
+        }
+
+        // 차트 인스턴스를 저장할 객체
+        const charts = {};
+
+        // 차트를 생성하거나 업데이트하는 함수
+        function createOrUpdateChart(chartId, type, data, options) {
+            const ctx = document.getElementById(chartId).getContext('2d');
+            if (charts[chartId]) {
+                charts[chartId].destroy();
+            }
+            charts[chartId] = new Chart(ctx, { type, data, options });
+        }
+
+        // 데이터 로드 및 차트 생성
+        async function loadDashboard() {
+            try {
+                const response = await fetch('/api/data');
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+
+                // 1. 침전 높이 및 Floc 개수 차트
+                createOrUpdateChart('heightFlocChart', 'line', {
+                    labels: data.labels,
+                    datasets: [
+                        { 
+                            label: '예상 침전 높이', yAxisID: 'yHeight', data: data.estimated_height, 
+                            borderColor: 'rgba(54, 162, 235, 1)', backgroundColor: 'rgba(54, 162, 235, 0.2)', fill: false, tension: 0.1
+                        },
+                        { 
+                            label: '보정된 침전 높이', yAxisID: 'yHeight', data: data.smoothed_height, 
+                            borderColor: 'rgba(255, 99, 132, 1)', backgroundColor: 'rgba(255, 99, 132, 0.2)', fill: false, tension: 0.1, borderDash: [5, 5]
+                        },
+                        { 
+                            label: 'Floc 개수', yAxisID: 'yFlocs', data: data.floc_count, 
+                            borderColor: 'rgba(75, 192, 192, 1)', backgroundColor: 'rgba(75, 192, 192, 0.2)', fill: false, tension: 0.1
+                        }
+                    ]
+                }, {
+                    scales: {
+                        yHeight: { type: 'linear', display: true, position: 'left', title: { display: true, text: '높이' } },
+                        yFlocs: { type: 'linear', display: true, position: 'right', title: { display: true, text: '개수' }, grid: { drawOnChartArea: false } }
+                    }
+                });
+
+                // 2. Floc 크기 분포 (마지막 데이터 기준)
+                createOrUpdateChart('flocSizeChart', 'doughnut', {
+                    labels: ['Small Flocs', 'Medium Flocs', 'Large Flocs'],
+                    datasets: [{
+                        data: [
+                            data.small_flocs[data.small_flocs.length - 1],
+                            data.medium_flocs[data.medium_flocs.length - 1],
+                            data.large_flocs[data.large_flocs.length - 1]
+                        ],
+                        backgroundColor: ['rgba(54, 162, 235, 0.8)', 'rgba(255, 206, 86, 0.8)', 'rgba(255, 99, 132, 0.8)']
+                    }]
+                });
+
+                // 3. 탁도 변화 차트
+                createOrUpdateChart('turbidityChart', 'line', {
+                    labels: data.labels,
+                    datasets: [{
+                        label: '탁도', data: data.turbidity,
+                        borderColor: 'rgba(153, 102, 255, 1)', backgroundColor: 'rgba(153, 102, 255, 0.2)', fill: true, tension: 0.1
+                    }]
+                });
+
+            } catch (error) {
+                console.error('Failed to load chart data:', error);
+                showError(`차트 데이터를 불러오는 데 실패했습니다: ${error.message}`);
+            }
+        }
+
+        // 이미지 갤러리 로드
+        async function loadImageGallery() {
+            try {
+                const response = await fetch('/api/images');
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+                }
+                const images = await response.json();
+                const gallery = document.getElementById('image-gallery');
+                gallery.innerHTML = ''; // 기존 이미지 초기화
+
+                images.forEach(image => {
+                    const imgElement = document.createElement('img');
+                    imgElement.src = image.url;
+                    imgElement.alt = image.original_filename;
+                    imgElement.dataset.bsToggle = 'modal';
+                    imgElement.dataset.bsTarget = '#imageModal';
+                    imgElement.dataset.filename = image.original_filename;
+                    gallery.appendChild(imgElement);
+                });
+            } catch (error) {
+                console.error('Failed to load images:', error);
+                showError(`이미지 갤러리를 불러오는 데 실패했습니다: ${error.message}`);
+            }
+        }
+
+        // 이미지 클릭 시 Modal에 해당 이미지 표시
+        const imageModal = document.getElementById('imageModal');
+        imageModal.addEventListener('show.bs.modal', function (event) {
+            const triggerElement = event.relatedTarget;
+            const imageSrc = triggerElement.src;
+            const imageFileName = triggerElement.dataset.filename;
+            
+            const modalTitle = imageModal.querySelector('.modal-title');
+            const modalImage = imageModal.querySelector('#modal-img-element');
+
+            modalTitle.textContent = imageFileName;
+            modalImage.src = imageSrc;
+        });
+
+        // 페이지 로드 시 데이터 로드 함수 실행
+        document.addEventListener('DOMContentLoaded', () => {
+            loadDashboard();
+            loadImageGallery();
+        });
+    </script>
+</body>
+</html>
