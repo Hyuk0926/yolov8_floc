@@ -18,9 +18,6 @@
    - ML/DL 라이브러리: PyTorch, Ultralytics (YOLOv8), OpenCV
 
   프로젝트 구조
-
-
-
    1 .
    2 ├── app.py                  # 웹 애플리케이션 실행 파일
    3 ├── measurement_floc.py     # Floc 측정 로직을 담은 모듈
@@ -87,8 +84,3 @@
   실행 후, 웹 브라우저에서 http://127.0.0.1:5000 주소로 접속하세요.
 
   ---
-
-
-  팁:
-   * requirements.txt 파일이 없다면, pip freeze > requirements.txt 명령어를 통해 현재 가상환경에 설치된 패키지 목록을 자동으로 생성할 수 있습니다.
-   * 프로젝트에 대한 스크린샷이나 데모 GIF를 추가하면 이해도를 더욱 높일 수 있습니다
